@@ -1,0 +1,212 @@
+---
+title: "Decomposition tables and figures for Stovitz, Wolfson, Shrier et al."
+author: "J. Wolfson"
+date: "Last updated: October 28, 2016"
+output: html_document
+params:
+  dat.folder: "C:/Users/Julian/Google Drive/manuscripts/StovitzShrier - ACLS/data/"
+  code.folder: "C:/Users/Julian/Google Drive/git/ACLS-decomposition/"
+  file.name: "final.csv"
+  savePlots: FALSE
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+
+library(survival)
+library(boot)
+library(knitr)
+
+#dat.base <- paste0(getwd(), "/", params$dat.folder)
+dat.base <- params$dat.folder
+code.base <- params$code.folder
+#code.base <- paste0(getwd(), "/", params$code.folder)
+
+source(paste0(code.base, "fourway-decomp-functions.R"))
+
+pretty.pvalue <- function(p, sdigits = 2, prefix = "p = ") { ## Utility function for displaying p-values
+  return( ifelse(p<0.001,"p < 0.001",sprintf("%s%s",prefix, as.character(signif(p,sdigits))) ) )
+}
+
+####### Read in the data ###########
+acls <- read.csv(paste0(dat.base, params$file.name))
+acls$PA <- acls$TOTALmet
+acls$CRF <- acls$testmin
+acls$PA.ir <- as.integer(acls$PA>0) ## Insufficient or recommended
+acls$PA.r <- as.integer(acls$PA >= 500)
+acls$CRF.mh <- as.integer( acls$CRF >= stats::quantile(acls$CRF, 0.2) ) ## Moderate or high
+acls$CRF.h <- as.integer( acls$CRF >= stats::quantile(acls$CRF, 0.6) ) ## High
+acls$BMI.h <- as.integer( acls$BMI >= median(acls$BMI) )
+
+upstream.confounders <- c("AGE","female","examyy","smoking","fCVD", "BMI.h")
+
+attach(acls)
+
+surv.obj <- Surv(followyear, deceased)
+
+fitAFT <- function(trt, confounders, transf = function(x) exp(x), dat = acls, dist = "loglogistic") {
+  surv.obj <- with(dat, Surv(followyear, deceased))
+  fmla <- as.formula( sprintf("surv.obj ~ %s + %s", trt, paste(confounders, collapse = " + ")) )
+  S <- summary( SR <- survreg( fmla, data=dat, dist = dist ) )
+  summ.table <- cbind( transf(S$coefficients), t( apply( transf(confint(SR)),1, rev ) ), S$table[-nrow(S$table),4] )
+  colnames(summ.table)[4] <- "p"
+  return( summ.table[-1,] )
+}
+
+exposure.effect <- function(T, CI = TRUE) { 
+  if(CI) {
+    CI.vals <- sort( c( T[1,2], T[1,3] ))
+    
+    rbind( sprintf("%.2f", T[1,1]), 
+          sprintf("(%.2f, %.2f)", CI.vals[1], CI.vals[2] )  )    
+  } else {
+    sprintf("%.2f (%s)", T[1,1], pretty.pvalue(T[1,4])  )    
+  }
+}
+```
+
+```{r include=FALSE, cache=TRUE}
+### Run the mediation analysis and cache the results ###
+acls.male <- subset(acls, female == 0)
+acls.female <- subset(acls, female == 1)
+
+upstream.confounders <- c("AGE","female","examyy","smoking","fCVD", "BMI")
+upstream.confounders.nosex <- c("AGE","examyy","smoking","fCVD", "BMI")
+mediators.PA <- c("CRF.mh", "abnHTN", "abnDM", "abnTC")
+mediators.CRF <- c( "PA.r", "abnHTN", "abnDM", "abnTC")
+
+expit <- function(x) exp(x)/(1+exp(x))
+
+R <- 100
+
+### Results for PA as the exposure
+mediators <- mediators.PA
+trt <- "PA.r"
+
+PA.results <- lapply( mediators, function(mediator) {
+    boot(acls, fourway.decomp, trt = trt, mediator = mediator, confounders = upstream.confounders, R = R) })
+gc()
+
+PA.results.m <- lapply( mediators, function(mediator) {
+  boot(acls.male, fourway.decomp, trt = trt, mediator = mediator, confounders = upstream.confounders.nosex, R = R) })
+gc()
+
+PA.results.f <- lapply( mediators, function(mediator) {
+  boot(acls.female, fourway.decomp, trt = trt, mediator = mediator, confounders = upstream.confounders.nosex, R = R) })
+gc()
+
+acls$age.h <- as.integer(acls$AGE > median(acls$AGE))
+
+
+### Results for CRF as the exposure
+mediators <- mediators.CRF
+trt <- "CRF.mh"
+
+CRF.results <- lapply( mediators, function(mediator) {
+  boot(acls, fourway.decomp, trt = trt, mediator = mediator, confounders = upstream.confounders, R = R) })
+gc()
+
+CRF.results.m <- lapply( mediators, function(mediator) {
+  boot(acls.male, fourway.decomp, trt = trt, mediator = mediator, confounders = upstream.confounders.nosex, R = R) })
+gc()
+
+CRF.results.f <- lapply( mediators, function(mediator) {
+  boot(acls.female, fourway.decomp, trt = trt, mediator = mediator, confounders = upstream.confounders.nosex, R = R) })
+gc()
+
+save(PA.results, PA.results.m, PA.results.f, CRF.results, CRF.results.m, CRF.results.f,
+     file = paste0(code.base, "mediation-results.Robj")) ## Save the results
+
+```
+
+## Exposure: PA (Recommended vs. Insufficient/Inactive)
+
+```{r include=FALSE}
+# Adjusted associations
+a11 <- exposure.effect( fitAFT("PA.r", confounders = upstream.confounders) )
+a12 <- exposure.effect( fitAFT("PA.r", confounders = c( upstream.confounders, "CRF.mh") ) )
+a13 <- exposure.effect( fitAFT("PA.r", confounders = c( upstream.confounders, "abnHTN") ) )
+a14 <- exposure.effect( fitAFT("PA.r", confounders = c( upstream.confounders, "abnDM") ) )
+a15 <- exposure.effect( fitAFT("PA.r", confounders = c( upstream.confounders, "abnTC") ) )
+
+mediators.PA <- c("CRF.mh", "abnHTN", "abnDM", "abnTC")
+
+PA.tables <- lapply(list( PA.results ), table.fourway, mediators = mediators.PA, transf = function(x) exp(-x))
+
+```
+
+```{r echo=FALSE}
+na.mat <- matrix(data="N/A", nrow = 2, ncol = 3)
+df <- cbind( rbind( a11,a12,a13,a14,a15 ), rbind(na.mat, PA.tables[[1]][,c(1,13,14)]) )
+colnames(df) <- c("Adjusted Association", "Total Effect", "% Mediated", "% Interaction")
+rownames(df) <- c("Upstream Only", "", "+ CRF", "", "+ HTN", "", "+ Diabetes", "", "+ HighChol", "")
+kable( df, 
+       row.names = TRUE)
+```
+
+```{r include = FALSE}
+getPct <- function(str, direction.word = TRUE) {
+  pct <- as.numeric(str)
+  if(direction.word) {
+    sprintf("%.0f%% %s", abs( round(100 * (pct - 1)) ), ifelse(sign(pct)==1, "increase", "decrease") )
+  } else {
+    sprintf("%.0f%%", round(100 * (pct - 1)) )
+  }
+}
+
+getCI <- function(str) {
+  strip.l <- gsub( "\\(", "", str)
+  strip.r <- gsub("\\)", "", strip.l)
+  strip.c <- gsub(",", "", strip.r)
+  get.vals <- as.numeric(strsplit(strip.c, " ")[[1]])
+  pcts <- sort(get.vals)
+  
+  sprintf("%.0f%%,  %.0f%%", round(100 * (pcts[1] - 1)), round(100 * (pcts[2] - 1)) )
+}
+```
+
+As seen in Table 1, after adjusting for all upstream variables, recommended PA (vs insufficient/inactive) was associated with approximately a `r getPct(a11[1,1])` in the median time to death, (95% CI: `r getCI(a11[2,1])`). Basic adjustment for potential mediators resulted in a smaller effect of PA when the mediator was CRF (i.e., `r getPct(a12[1,1])`, 95% CI: `r getCI(a12[2,1])`), but an unchanged effect of PA with the other mediators, (HTN, DM, and High Cholesterol). Decomposition analysis found that `r df[3, "% Mediated"]` (95% CI: `r df[4, "% Mediated"]`) of the effect of PA was mediated by CRF. A small percentage of the effect of PA was mediated by HTN and Diabetes. There was no evidence of statistically significant interaction between PA and CRF, HTN, DM, or High Cholesterol. 
+
+```{r fig.width=11, fig.height=6, warning=FALSE}
+library(ggplot2)
+
+exposure <- "Physical Activity"
+mediator.names <- c("Cardiorespiratory Fitness", "Hypertension", "Diabetes", "Hypercholestrolemia")
+g.PA <- gg.fourway( PA.results, exposure, mediator.names, custom.ylim = c(0.88, 1.25) )
+
+multiplot(plotlist = g.PA, cols = 2)
+```
+
+## Exposure: CRF (Fit vs. Unfit)
+
+```{r include = FALSE}
+b11 <- exposure.effect( fitAFT("CRF.mh", confounders = upstream.confounders) )
+b12 <- exposure.effect( fitAFT("CRF.mh", confounders = c( upstream.confounders, "PA.r") ) )
+b13 <- exposure.effect( fitAFT("CRF.mh", confounders = c( upstream.confounders, "abnHTN") ) )
+b14 <- exposure.effect( fitAFT("CRF.mh", confounders = c( upstream.confounders, "abnDM") ) )
+b15 <- exposure.effect( fitAFT("CRF.mh", confounders = c( upstream.confounders, "abnTC") ) )
+
+mediators.CRF <- c( "PA.r", "abnHTN", "abnDM", "abnTC")
+
+CRF.tables <- lapply(list( CRF.results ), table.fourway, mediators = mediators.CRF, transf = function(x) exp(-x))
+
+```
+
+```{r}
+na.mat <- matrix(data="N/A", nrow = 2, ncol = 3)
+df <- cbind( rbind( b11,b12,b13,b14,b15 ), rbind(na.mat, CRF.tables[[1]][,c(1,13,14)]) )
+colnames(df) <- c("Adjusted Association", "Total Effect", "% Mediated", "% Interaction")
+rownames(df) <- c("Upstream Only", "", "+ PA", "", "+ HTN", "", "+ Diabetes", "", "+ HighChol", "")
+kable( df, 
+       row.names = TRUE)
+```
+
+Table 2 describes the effect of CRF on mortality. After adjusting for all upstream variables, those who were "fit" (vs unfit) had approximately a `r getPct(b11[1,1])` in the median time to death, (95% CI: `r getCI(b11[2,1])`). Basic adjustment for potential mediators had minimal to no effect on the rate. Decomposition analysis found that a small amount of the effect of CRF appeared to mediated by HTN, DM and High Cholesterol. There was no significant mediation of the effect of CRF by PA. 
+
+```{r  fig.width=11, fig.height=6}
+exposure <- "Cardiorespiratory Fitness"
+mediator.names <- c("Physical Activity", "Hypertension", "Diabetes", "Hypercholesterolemia")
+g.CRF <- gg.fourway( CRF.results, exposure, mediator.names, custom.ylim = c(0.94, 1.55) )
+
+multiplot(plotlist = g.CRF, cols = 2)
+```
