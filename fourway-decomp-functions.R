@@ -240,7 +240,7 @@ gg.fourway <- function(res, exposure.name, mediator.names, transf = function(x) 
       scale_y_continuous( label = function(x) { round(exp(x),1) } ) +
       theme( axis.text.x = element_blank(),
              axis.ticks.x = element_blank(),
-             plot.title = element_text(size = rel(1.5), face="bold"),
+             plot.title = element_text(size = rel(1.2), face="bold"),
              panel.grid.major.x = element_blank(),
              panel.grid.minor.x = element_blank(),
              legend.text = element_text(size = rel(1.2)))
