@@ -4,9 +4,9 @@ author: "J. Wolfson"
 date: "Last updated: October 28, 2016"
 output: html_document
 params:
-  dat.folder: "C:/Users/Julian/Google Drive/manuscripts/StovitzShrier - ACLS/data/"
   code.folder: "C:/Users/Julian/Google Drive/git/ACLS-decomposition/"
-  file.name: "final.csv"
+  dat.folder: "C:/Users/Julian/Google Drive/git/ACLS-decomposition/data/"
+  dat.filename: "acls-fake.csv"
   savePlots: FALSE
 ---
 
@@ -29,7 +29,7 @@ pretty.pvalue <- function(p, sdigits = 2, prefix = "p = ") { ## Utility function
 }
 
 ####### Read in the data ###########
-acls <- read.csv(paste0(dat.base, params$file.name))
+acls <- read.csv(paste0(dat.base, params$dat.filename))
 acls$PA <- acls$TOTALmet
 acls$CRF <- acls$testmin
 acls$PA.ir <- as.integer(acls$PA>0) ## Insufficient or recommended
@@ -113,9 +113,6 @@ gc()
 CRF.results.f <- lapply( mediators, function(mediator) {
   boot(acls.female, fourway.decomp, trt = trt, mediator = mediator, confounders = upstream.confounders.nosex, R = R) })
 gc()
-
-save(PA.results, PA.results.m, PA.results.f, CRF.results, CRF.results.m, CRF.results.f,
-     file = paste0(code.base, "mediation-results.Robj")) ## Save the results
 
 ```
 
