@@ -2,7 +2,7 @@
 
 ## Description
 
-Code supporting "Decomposing the effects of Physical Activity and Cardiorespiratory Fitness: A reanalysis of the Aerobics Center Longitudinal Study". Implements the main decomposition and 
+Code supporting "Decomposing the Effects of Physical Activity and Cardiorespiratory Fitness on Mortality".
 
 ## Instructions for use
 
