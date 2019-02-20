@@ -1,5 +1,7 @@
 # ACLS-decomposition
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.2574138.svg)](https://doi.org/10.5281/zenodo.2574138)
+
 ## Description
 
 Code supporting "Decomposing the Effects of Physical Activity and Cardiorespiratory Fitness on Mortality".
